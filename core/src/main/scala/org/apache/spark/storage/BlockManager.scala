@@ -519,7 +519,7 @@ private[spark] class BlockManager(
           // still pass but eventually we will get an exception because we can't find the block.
           if (!level.useMemory
             || blockInfo.get(blockId).isEmpty //some remove that block
-            || blockInfo.get(blockId).get != info //some remove that block and put a new
+            || blockInfo.get(blockId).get ne info //some remove that block and put a new
             || memoryStore.contains(blockId) // other threads already put into memory
           ) {
             // If the block shouldn't be stored in memory, we can just return it
