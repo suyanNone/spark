@@ -780,6 +780,5 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     info.finishTime = 1  // to prevent spurious errors in JobProgressListener
     info
   }
-
 }
 

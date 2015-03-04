@@ -152,7 +152,10 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        */
       updatedBlocks ++=
         blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
-      blockManager.get(key) match {
+      if (level.useMemory) {
+        blockManager.memoryStore.releasePendingUnrollMemoryForThisThread()
+      }
+      blockManager.getLocal(blockId, !level.useMemory) match {
         case Some(v) => v.data.asInstanceOf[Iterator[T]]
         case None =>
           logInfo(s"Failure to store $key")
@@ -169,7 +172,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        * single partition. Instead, we unroll the values cautiously, potentially aborting and
        * dropping the partition to disk if applicable.
        */
-      blockManager.memoryStore.unrollSafely(key, values, updatedBlocks) match {
+      blockManager.memoryStore.unrollSafely(key, values, updatedBlocks, level.useDisk) match {
         case Left(arr) =>
           // We have successfully unrolled the entire partition, so cache it in memory
           updatedBlocks ++=

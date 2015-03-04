@@ -1123,7 +1123,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
 
   // Note: this needs to be a function instead of a 'val' so that the disableOutputSpecValidation
-  // setting can take effect:
+
   private def isOutputSpecValidationEnabled: Boolean = {
     val validationDisabled = PairRDDFunctions.disableOutputSpecValidation.value
     val enabledInConf = self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)

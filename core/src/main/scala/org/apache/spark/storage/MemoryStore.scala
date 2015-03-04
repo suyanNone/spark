@@ -98,6 +98,23 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  override def putOffHeapBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+    // Work on a duplicate - since the original input might be used elsewhere.
+    val droppedBlocks = Seq()
+    val bytes = _bytes.duplicate()
+    accountingLock.synchronized {
+      val freeSpaceResult = ensureFreeSpace(blockId, size)
+      val enoughFreeSpace = freeSpaceResult.success
+      val droppedBlocks = freeSpaceResult.droppedBlocks
+      if (ensureSpace) {
+        val bytes = ByteBuffer.allocate(bytes.limit)
+        copyForMemory.put(bytes)
+        val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
+      }
+    }
+    PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks ++ putAttempt.droppedBlocks)
+  }
+
   override def putArray(
       blockId: BlockId,
       values: Array[Any],
@@ -223,7 +240,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   def unrollSafely(
       blockId: BlockId,
       values: Iterator[Any],
-      droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)])
+      droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)],
+      keepUnroll: Boolean = true)
     : Either[Array[Any], Iterator[Any]] = {
 
     // Number of elements unrolled so far
@@ -295,10 +313,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       // In this case, we should release the memory after we cache the block there.
       // Otherwise, if we return an iterator, we release the memory reserved here
       // later when the task finishes.
-      if (keepUnrolling) {
-        accountingLock.synchronized {
-          val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
+      accountingLock {
+        val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
+        if (keepUnrolling) {
           releaseUnrollMemoryForThisThread(amountToRelease)
+          reservePendingUnrollMemoryForThisThread(amountToRelease)
+        } else if (!keepUnroll) {
+          // @TODO for memery and disk block, it will finally put into disk, according to current code
+          // it will finally put into disk
           reservePendingUnrollMemoryForThisThread(amountToRelease)
         }
       }
