@@ -498,6 +498,10 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     executorIdToHost -= executorId
+    taskSetsByStageIdAndAttempt.foreach {
+      case (_, taskSets) =>
+        taskSets.head._2.markAsZombie(s"Executor $executorId lost($reason)")
+    }
     rootPool.executorLost(executorId, host, reason)
   }
 

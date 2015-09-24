@@ -1335,16 +1335,29 @@ class DAGScheduler(
       blockManagerMaster.removeExecutor(execId)
 
       if (!env.blockManager.externalShuffleServiceEnabled || fetchFailed) {
+        val resubmitStages = new HashSet[Stage]
         // TODO: This will be really slow if we keep accumulating shuffle map stages
         for ((shuffleId, stage) <- shuffleToMapStage) {
           stage.removeOutputsOnExecutor(execId)
-          val locs = stage.outputLocs.map(_.headOption.orNull)
-          mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+          if (runningStages.contains(stage)) {
+            markStageAsFinished(stage)
+            resubmitStages += stage
+          } else {
+            val locs = stage.outputLocs.map(_.headOption.orNull)
+            mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+          }
         }
         if (shuffleToMapStage.isEmpty) {
           mapOutputTracker.incrementEpoch()
         }
         clearCacheLocs()
+
+        if (!fetchFailed && failedStages.isEmpty) {
+          messageScheduler.schedule(new Runnable {
+            override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+          }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+        }
+        failedStages ++ resubmitStages
       }
     } else {
       logDebug("Additional executor lost message for " + execId +

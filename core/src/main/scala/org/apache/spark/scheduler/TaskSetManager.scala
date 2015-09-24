@@ -750,6 +750,12 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
+  def markAsZombie(message: String): Unit = sched.synchronized {
+    logInfo(s"TaskSet mark as Zombie because $message")
+    isZombie = true
+    maybeFinishTaskSet()
+  }
+
   /** If the given task ID is not in the set of running tasks, adds it.
    *
    * Used to keep track of the number of running tasks, for enforcing scheduling policies.
