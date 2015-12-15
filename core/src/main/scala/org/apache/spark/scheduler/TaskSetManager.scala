@@ -149,11 +149,7 @@ private[spark] class TaskSetManager(
   val recentExceptions = HashMap[String, (Int, Long)]()
 
   // Figure out the current map output tracker epoch and set it on all tasks
-  val epoch = sched.mapOutputTracker.getEpoch
-  logDebug("Epoch for " + taskSet + ": " + epoch)
-  for (t <- tasks) {
-    t.epoch = epoch
-  }
+  updateOrSetEpoch()
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
@@ -779,6 +775,8 @@ private[spark] class TaskSetManager(
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
   override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
+    // update task epoch to tell executor mapoutputTrackerMaster epoch was changed
+    updateOrSetEpoch()
     // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
@@ -903,6 +901,14 @@ private[spark] class TaskSetManager(
 
   def executorAdded() {
     recomputeLocality()
+  }
+
+  def updateOrSetEpoch(): Unit = {
+    val epoch = sched.mapOutputTracker.getEpoch
+    logDebug("Epoch for " + taskSet + ": " + epoch)
+    for (t <- tasks) {
+      t.epoch = epoch
+    }
   }
 }
 
